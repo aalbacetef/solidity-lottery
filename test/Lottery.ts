@@ -310,7 +310,7 @@ describe("Lottery", function() {
     });
 
     it("should fail if not executed by the owner", async () => {
-      const { lottery, publicClient } = await loadFixture(deployDefault);
+      const { lottery } = await loadFixture(deployDefault);
       const contract = await hre.viem.getContractAt("Lottery", lottery.address);
       const wallets = await hre.viem.getWalletClients();
       const chosen = wallets[2];
