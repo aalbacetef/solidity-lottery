@@ -3,8 +3,9 @@ pragma solidity ^0.8.28;
 
 contract Lottery {
   address payable public owner;
-  uint pool;
-  bool isOver;
+  uint public pool;
+  bool public isOver;
+  uint public winningNumber;
 
   mapping(uint => address) participantTickets;
   mapping(uint => bool) isAlreadySet;
@@ -17,23 +18,26 @@ contract Lottery {
   uint[] tickets;
 
   event PoolIncreased(uint amount);
-  event LotteryOver(uint winningTicket);
+  event LotteryOver(uint drawnDigit);
 
   constructor(uint _pricePerTicket, uint _ticketDigitLength, uint _fees, uint _nonce, uint _maxRetries) payable {
-    require(_pricePerTicket > fees, "price per ticket must be larger than the amount paid for fees");
-    require(_ticketDigitLength > 0, "ticket digit length must be larger than 0");
     require(_fees > 0, "fees must be larger than 0");
+    require(_pricePerTicket > _fees, "price per ticket must be larger than the amount paid for fees");
+    require(_ticketDigitLength > 0, "ticket digit length must be larger than 0");
     require(_maxRetries > 0, "max retries must be larger than 0");
 
     owner = payable(msg.sender);
     isOver = false;
     nonce = _nonce;
     maxRetries = _maxRetries;
+    pricePerTicket = _pricePerTicket;
+    fees = _fees;
+    winningNumber = 0;
   }
 
-  function buyTicket(uint numTickets) payable public {
+  function buyTicket(uint numTickets) external payable { 
     require(numTickets > 0, "must have purchased at least one ticket");
-    require(msg.value != (pricePerTicket * numTickets), "must send exact amount required to purchase tickets");
+    require(msg.value == (pricePerTicket * numTickets), "must send exact amount required to purchase tickets");
 
     require(!isOver, "lottery is over");
     
@@ -60,8 +64,13 @@ contract Lottery {
 
       tickets.push(ticket);
     }
+
+    uint amount = total - totalFees;
+    owner.transfer(totalFees);
+
+    pool += amount;
       
-    emit PoolIncreased(total - totalFees);
+    emit PoolIncreased(amount);
   }
 
 
@@ -69,6 +78,7 @@ contract Lottery {
   function setWinningNumber(uint number) public {
     require(msg.sender == owner, "can only be executed by the owner");
     isOver = true;
+    winningNumber = number;
     
     emit LotteryOver(number);
   }
