@@ -29,6 +29,15 @@ contract Lottery {
   event PoolIncreased(uint amount);
   event LotteryOver(uint drawnDigit);
 
+  error MustBeOwner();
+
+  modifier onlyOwner() {
+    if(msg.sender != owner) {
+      revert MustBeOwner();
+    }
+    _;
+  }
+
   constructor(
     uint _pricePerTicket, 
     uint _ticketDigitLength, 
@@ -125,9 +134,7 @@ contract Lottery {
   //  - set pool=0
   //  - set ownerBalance=0
   //  - set isOver=true
-  function emptyBalance() external payable {
-    require(msg.sender == owner, "can only be executed by the owner");
-
+  function emptyBalance() external payable onlyOwner {
     uint currentBalance = address(this).balance;
     require(currentBalance > 0, "balance is empty");
 
@@ -194,7 +201,7 @@ contract Lottery {
   }
 
   // NOTE: transferring ownership to a participant is not expected.
-  function transferOwnership(address newOwner) external {
+  function transferOwnership(address newOwner) external onlyOwner {
     require(msg.sender == owner, "can only be called by the owner");
     owner = payable(newOwner);
   }
