@@ -174,7 +174,7 @@ contract Lottery {
   }
 
   function transferOwnership(address newOwner) external {
-    require(msg.sender == newOwner, "can only be called by the owner");
+    require(msg.sender == owner, "can only be called by the owner");
     owner = payable(newOwner);
   }
   
