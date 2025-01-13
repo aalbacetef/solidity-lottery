@@ -10,7 +10,6 @@ contract Lottery {
 
   mapping(uint => address) participantTickets;
   mapping(uint => bool) isAlreadySet;
-  mapping(address => bool) alreadyWithdrew;
   mapping(uint => uint) ticketBrackets;
   mapping(address => uint) winnerBalances;
   mapping(address => uint[]) ticketsForParticipant;
@@ -28,12 +27,25 @@ contract Lottery {
 
   event PoolIncreased(uint amount);
   event LotteryOver(uint drawnDigit);
+  event OwnershipChanged(address from, address to);
 
   error MustBeOwner();
+  error NotAllowed(address addr);
+  error NothingToWithdraw();
+  error LotteryAlreadyOver();
+  error InvalidAmount(uint want, uint got);
+  error OutOfBounds(uint index, uint low, uint high);
 
   modifier onlyOwner() {
     if(msg.sender != owner) {
       revert MustBeOwner();
+    }
+    _;
+  }
+
+  modifier onlyIfNotOver() {
+    if(isOver) {
+      revert LotteryAlreadyOver();
     }
     _;
   }
@@ -67,10 +79,16 @@ contract Lottery {
     alreadyDistributed = false;
   }
 
-  function buyTicket(uint numTickets) external payable { 
-    require(numTickets > 0, "must have purchased at least one ticket");
-    require(msg.value == (pricePerTicket * numTickets), "must send exact amount required to purchase tickets");
-    require(!isOver, "lottery is over");
+  function buyTicket(uint numTickets) external payable onlyIfNotOver { 
+    if (numTickets == 0) {
+      revert InvalidAmount(1, 0);
+    }
+
+    uint amountWanted = pricePerTicket * numTickets;
+
+    if(msg.value != amountWanted) {
+      revert InvalidAmount(amountWanted, msg.value);
+    }
     
     uint total = numTickets * pricePerTicket;
     uint totalFees = numTickets * fees;
@@ -107,24 +125,25 @@ contract Lottery {
     emit PoolIncreased(amount);
   }
 
-
   function withdraw() external payable {
-    require(!alreadyWithdrew[msg.sender], "already withdrew prize");
-
     if(msg.sender == owner) {
-      require(ownerBalance > 0, "there is nothing to withdraw");
+      uint toTransfer = ownerBalance;
 
-      uint shouldTransfer = ownerBalance;
-      alreadyWithdrew[owner] = true;
+      if(toTransfer == 0) {
+        revert NothingToWithdraw();
+      }
+
       ownerBalance = 0;
-      owner.transfer(shouldTransfer);
+      owner.transfer(toTransfer);
+
       return;
     }
 
     uint winnerBalance = winnerBalances[msg.sender];
-    require(winnerBalance > 0, "no prize");
+    if(winnerBalance == 0) {
+      revert NothingToWithdraw();
+    }
 
-    alreadyWithdrew[msg.sender] = true;
     winnerBalances[msg.sender] = 0;
     payable(msg.sender).transfer(winnerBalance);     
   }
@@ -136,20 +155,19 @@ contract Lottery {
   //  - set isOver=true
   function emptyBalance() external payable onlyOwner {
     uint currentBalance = address(this).balance;
-    require(currentBalance > 0, "balance is empty");
+
+    if(currentBalance == 0) {
+      revert NothingToWithdraw();
+    }
 
     pool = 0;
     ownerBalance = 0;
     isOver = true;
-    alreadyWithdrew[msg.sender] = true;
     owner.transfer(currentBalance);
   }
 
   // setWinningNumber sets the winning number and can only be called by the owner.
-  function setWinningNumber(uint number) external {
-    require(msg.sender == owner, "can only be executed by the owner");
-    require(!isOver, "lottery is already over");
-
+  function setWinningNumber(uint number) external onlyOwner onlyIfNotOver {
     isOver = true;
     winningNumber = number;
 
@@ -159,8 +177,6 @@ contract Lottery {
   }
 
   function distributePrizes() private {
-    require(!alreadyDistributed, "prizes already distributed");
-
     for(uint k = 0; k < tickets.length; k++) {
       uint ticket = tickets[k];
       uint bracket = _determineBracket(ticket);
@@ -188,13 +204,13 @@ contract Lottery {
       uint amountForUser = _calculatePrize(bracket, winnerCount);
       winnerBalances[participant] += amountForUser;
     }
-
-    alreadyDistributed = true;
   }
 
   function ticketsForAddress(address participant) external view returns(uint[] memory) {
     if(msg.sender != owner){
-      require(msg.sender == participant, "can only see your own tickets");
+      if(msg.sender != participant) {
+        revert NotAllowed(participant);
+      }
     }
 
     return ticketsForParticipant[participant];
@@ -202,8 +218,10 @@ contract Lottery {
 
   // NOTE: transferring ownership to a participant is not expected.
   function transferOwnership(address newOwner) external onlyOwner {
-    require(msg.sender == owner, "can only be called by the owner");
+    address oldOwner = owner;
     owner = payable(newOwner);
+
+    emit OwnershipChanged(oldOwner, newOwner);
   }
   
   function _calculatePrize(uint bracket, uint winnerCount) private view returns (uint) {
@@ -226,13 +244,18 @@ contract Lottery {
   }
 
   function _prizePerBracket(uint index) private view returns(uint) {
-    require(index >= 1 && index <= prizeBrackets.length, 'index should be in bounds [1,n]');
+    uint low = 1;
+    uint high = prizeBrackets.length;
+
+    if(index < low || index > high) {
+      revert OutOfBounds(index, low, high);
+    }
 
     return prizeBrackets[index - 1];
   }
 
   function _generateTicket(uint _mod) private returns(uint) {
-    // TODO: replace _randMode with a call to ChainLink VRF.
+    // TODO: replace _randMod with a call to ChainLink VRF.
     return _randMod(_mod);
   }
     
