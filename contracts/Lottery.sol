@@ -35,6 +35,7 @@ contract Lottery {
   error LotteryAlreadyOver();
   error InvalidAmount(uint want, uint got);
   error OutOfBounds(uint index, uint low, uint high);
+  error MaxRetriesExceeded();
 
   modifier onlyOwner() {
     if(msg.sender != owner) {
@@ -106,7 +107,7 @@ contract Lottery {
 
         retries++;
         if(retries > maxRetries) {
-          revert("max retries exceeded");
+          revert MaxRetriesExceeded();
         }
       }
 
