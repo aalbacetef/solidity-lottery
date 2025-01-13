@@ -103,6 +103,8 @@ contract Lottery {
     require(!alreadyWithdrew[msg.sender], "already withdrew prize");
 
     if(msg.sender == owner) {
+      require(ownerBalance > 0, "there is nothing to withdraw");
+
       uint shouldTransfer = ownerBalance;
       alreadyWithdrew[owner] = true;
       ownerBalance = 0;
@@ -116,6 +118,24 @@ contract Lottery {
     alreadyWithdrew[msg.sender] = true;
     winnerBalances[msg.sender] = 0;
     payable(msg.sender).transfer(winnerBalance);     
+  }
+
+  // emptyBalance will empty the lottery account's balance to the owner's account.
+  // it will also:
+  //  - set pool=0
+  //  - set ownerBalance=0
+  //  - set isOver=true
+  function emptyBalance() external payable {
+    require(msg.sender == owner, "can only be executed by the owner");
+
+    uint currentBalance = address(this).balance;
+    require(currentBalance > 0, "balance is empty");
+
+    pool = 0;
+    ownerBalance = 0;
+    isOver = true;
+    alreadyWithdrew[msg.sender] = true;
+    owner.transfer(currentBalance);
   }
 
   // setWinningNumber sets the winning number and can only be called by the owner.
@@ -173,6 +193,7 @@ contract Lottery {
     return ticketsForParticipant[participant];
   }
 
+  // NOTE: transferring ownership to a participant is not expected.
   function transferOwnership(address newOwner) external {
     require(msg.sender == owner, "can only be called by the owner");
     owner = payable(newOwner);
@@ -204,12 +225,12 @@ contract Lottery {
   }
 
   function _generateTicket(uint _mod) private returns(uint) {
-    uint v = _randMod(_mod);
-    return v;
+    // TODO: replace _randMode with a call to ChainLink VRF.
+    return _randMod(_mod);
   }
     
   function _randMod(uint _modulus) private returns(uint) {
-      nonce++;
-      return uint(keccak256(abi.encodePacked(block.timestamp,msg.sender, nonce))) % _modulus;
+    nonce++;
+    return uint(keccak256(abi.encodePacked(block.timestamp,msg.sender, nonce))) % (_modulus + 1);
   }
 }
