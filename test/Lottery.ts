@@ -137,50 +137,57 @@ describe("Lottery", function() {
       const wallets = await hre.viem.getWalletClients();
       const wallet = wallets[1];
 
-      await expect(lottery.write.buyTicket(
-        [0n], { account: wallet.account, value: 0n }
-      )).to.be.eventually.rejectedWith("must have purchased at least one ticket");
+      await shouldFailWithError(
+        lottery.write.buyTicket(
+          [0n], { account: wallet.account, value: 0n }
+        ),
+        'InvalidAmount(1, 0)',
+      );
     });
 
     it("should fail if purchasing with an invalid amount", async () => {
-      const { lottery } = await loadFixture(deployDefault);
+      const { lottery, settings } = await loadFixture(deployDefault);
       const wallets = await hre.viem.getWalletClients();
       const wallet = wallets[1];
 
       const insufficientPayment = defaultSettings.pricePerTicket - 1n;
 
-      await expect(lottery.write.buyTicket(
-        [1n],
-        { account: wallet.account, value: insufficientPayment },
-      )).to.be.eventually.rejectedWith("must send exact amount required to purchase tickets");
+      const want = settings.pricePerTicket;
+
+      await shouldFailWithError(
+        lottery.write.buyTicket(
+          [1n], { account: wallet.account, value: insufficientPayment },
+        ),
+        `InvalidAmount(${want}, ${insufficientPayment})`
+      );
     });
 
     it("should purchase a ticket", async () => {
-      const { lottery, settings } = await loadFixture(deployDefault);
+      const { lottery, settings, publicClient } = await loadFixture(deployDefault);
       const wallets = await hre.viem.getWalletClients();
       const wallet = wallets[1];
 
-      await expect(lottery.write.buyTicket(
+      await shouldFulfill(publicClient, lottery.write.buyTicket(
         [1n],
         { account: wallet.account, value: settings.pricePerTicket },
-      )).to.not.be.eventually.rejected;
+      ));
     });
 
     it("should purchase n tickets", async () => {
-      const { lottery, settings } = await loadFixture(deployDefault);
+      const { lottery, settings, publicClient } = await loadFixture(deployDefault);
       const wallets = await hre.viem.getWalletClients();
       const wallet = wallets[1];
 
       const tickets = 5n;
 
-      await expect(lottery.write.buyTicket(
+      await shouldFulfill(publicClient, lottery.write.buyTicket(
         [tickets],
         {
           account: wallet.account,
           value: tickets * settings.pricePerTicket,
         },
 
-      )).to.not.be.eventually.rejected;
+      ));
     });
 
     it("should update the pool correctly", async () => {
@@ -276,15 +283,18 @@ describe("Lottery", function() {
       const tickets = 5n;
       const amountPaid = tickets * settings.pricePerTicket;
 
-      await lottery.write.buyTicket(
-        [tickets],
-        { account: wallet.account, value: amountPaid },
-      );
+      await publicClient.waitForTransactionReceipt({
+        hash: await lottery.write.buyTicket(
+          [tickets],
+          { account: wallet.account, value: amountPaid },
+        )
+      });
 
       const amountFees = tickets * settings.fees;
 
-      const txHash = await lottery.write.withdraw({ account: ownerWallet.account });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: await lottery.write.withdraw({ account: ownerWallet.account })
+      });
       const gas = receipt.gasUsed * receipt.effectiveGasPrice;
 
       const want = amountFees - gas;
@@ -332,9 +342,12 @@ describe("Lottery", function() {
 
       const want = 5n;
 
-      return expect(lottery.write.setWinningNumber(
-        [want], { account: chosen.account }
-      )).to.be.eventually.rejectedWith('can only be executed by the owner');
+      return shouldFailWithError(
+        lottery.write.setWinningNumber(
+          [want], { account: chosen.account }
+        ),
+        'MustBeOwner',
+      );
     });
 
     it("should emit the event", async () => {
@@ -370,10 +383,12 @@ describe("Lottery", function() {
         )
       });
 
-      await expect(lottery.write.setWinningNumber(
-        [want],
-        { account: chosen.account }
-      )).to.be.eventually.rejectedWith('lottery is already over');
+      await shouldFailWithError(
+        lottery.write.setWinningNumber(
+          [want], { account: chosen.account }
+        ),
+        'LotteryAlreadyOver'
+      );
     });
   });
 
@@ -446,9 +461,10 @@ describe("Lottery", function() {
 
       await play(publicClient, participants, settings.pricePerTicket, lottery);
 
-      await expect(lottery.write.emptyBalance({
-        account: wallets[1].account
-      })).to.be.eventually.rejectedWith('MustBeOwner');
+      await shouldFailWithError(
+        lottery.write.emptyBalance({ account: wallets[1].account }),
+        'MustBeOwner',
+      );
     });
 
     it("should empty the lottery balance to the owner", async () => {
@@ -492,13 +508,15 @@ describe("Lottery", function() {
       const finalPool = await lottery.read.pool();
       expect(finalPool).to.be.equal(0n, 'pool should have been set to 0');
 
-      await expect(lottery.write.emptyBalance({
-        account: owner.account
-      })).to.be.eventually.rejectedWith("balance is empty");
+      await shouldFailWithError(
+        lottery.write.emptyBalance({ account: owner.account }),
+        'NothingToWithdraw',
+      );
 
-      await expect(lottery.write.withdraw({
-        account: owner.account
-      })).to.be.eventually.rejectedWith('already withdrew prize');
+      await shouldFailWithError(
+        lottery.write.withdraw({ account: owner.account }),
+        'NothingToWithdraw'
+      );
     });
   });
 
@@ -539,7 +557,69 @@ describe("Lottery", function() {
         await lottery.read.owner(),
         targetAddress,
       );
+
+      const events = await lottery.getEvents.OwnershipChanged();
+      expect(events).to.be.lengthOf(1);
+      shouldEqualIgnoreCase(
+        events[0].args.from!,
+        wallets[0].account.address,
+      );
+      shouldEqualIgnoreCase(
+        events[0].args.to!,
+        targetAddress,
+      )
     });
+  });
+
+  describe("tickets for address", () => {
+    it("should allow the owner to see any tickets", async () => {
+      const { lottery, settings, publicClient } = await loadFixture(deployDefault);
+      const wallets = await hre.viem.getWalletClients();
+
+      const owner = wallets[0];
+      const target = wallets[1];
+      const participants = wallets.slice(1, 5);
+      await play(publicClient, participants, settings.pricePerTicket, lottery);
+
+      await expect(lottery.read.ticketsForAddress(
+        [target.account.address],
+        { account: owner.account },
+      )).to.be.eventually.fulfilled;
+    });
+
+    it("should fail if not the owner", async () => {
+      const { lottery, settings, publicClient } = await loadFixture(deployDefault);
+      const wallets = await hre.viem.getWalletClients();
+
+      const target = wallets[1];
+      const participants = wallets.slice(1, 5);
+      await play(publicClient, participants, settings.pricePerTicket, lottery);
+
+      const want = target.account.address;
+
+      await shouldFailWithError(
+        lottery.read.ticketsForAddress(
+          [want],
+          { account: wallets[2].account },
+        ),
+        'NotAllowed',
+      );
+    });
+
+    it("should allow to see one's own tickets", async () => {
+      const { lottery, settings, publicClient } = await loadFixture(deployDefault);
+      const wallets = await hre.viem.getWalletClients();
+
+      const target = wallets[1];
+      const participants = wallets.slice(1, 5);
+      await play(publicClient, participants, settings.pricePerTicket, lottery);
+
+      await expect(lottery.read.ticketsForAddress(
+        [target.account.address],
+        { account: target.account },
+      )).to.be.eventually.fulfilled;
+    });
+
   })
 });
 
@@ -550,9 +630,13 @@ function shouldEqualIgnoreCase(a: string, b: string) {
   expect(a.toLowerCase()).to.be.equal(b.toLowerCase());
 }
 
+async function shouldFailWithError(promise: Promise<any>, err: string) {
+  return await expect(promise).to.be.eventually.rejectedWith(err);
+}
+
 async function shouldFulfill(publicClient: waitForable, promise: Promise<any>) {
   const hash = await expect(promise).to.be.eventually.fulfilled;
-  await publicClient.waitForTransactionReceipt({ hash });
+  return await publicClient.waitForTransactionReceipt({ hash });
 }
 
 type waitForable = {
