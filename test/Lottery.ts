@@ -415,17 +415,39 @@ describe("Lottery", function() {
         );
       }
 
+      const winningIndex = 5;
+      let tickets = [];
+
       for (let k = 0; k < participants.length; k++) {
         const p = participants[k];
         const v = await contract.read.ticketsForAddress([p.account.address]);
-        console.log('v: ', v);
+
+        tickets[k] = v.slice(0);
       }
+
+      const pool = await contract.read.pool();
+
+      const winningNumber = tickets[winningIndex][0];
+      const winner = participants[winningIndex];
+
+      await publicClient.waitForTransactionReceipt({
+        hash: await contract.write.setWinningNumber([winningNumber], { account: owner.account })
+      });
+
+
+      const startingWinnerBalance = await publicClient.getBalance({ address: winner.account.address });
+
+      const withdrawHash = await contract.write.withdraw({ account: winner.account });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: withdrawHash });
+      const gas = receipt.gasUsed * receipt.effectiveGasPrice;
+
+      const finalWinnerBalance = await publicClient.getBalance({ address: winner.account.address });
+
+      const amountWon = finalWinnerBalance - startingWinnerBalance;
+      const expected = ((pool * BigInt(settings.prizeBrackets[0])) / 100n) - gas;
+
+      expect(amountWon).to.be.equal(expected);
     });
   });
 });
-
-
-
-
-
 

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
-import "hardhat/console.sol";
-
 contract Lottery {
   address payable public owner;
   uint public pool;
@@ -102,12 +100,10 @@ contract Lottery {
 
 
   function withdraw() external payable {
-    console.log('in withdraw');
     require(!alreadyWithdrew[msg.sender], "already withdrew prize");
 
     if(msg.sender == owner) {
       uint shouldTransfer = ownerBalance;
-      console.log('owner balance:', ownerBalance);
       alreadyWithdrew[owner] = true;
       ownerBalance = 0;
       owner.transfer(shouldTransfer);
@@ -183,7 +179,7 @@ contract Lottery {
   }
   
   function _calculatePrize(uint bracket, uint winnerCount) private view returns (uint) {
-    uint amountPerBracket = (prizeBrackets[bracket - 1] / 100) * (pool);
+    uint amountPerBracket = (prizeBrackets[bracket - 1]  * pool) / 100;
     return amountPerBracket / winnerCount;
   }
 
