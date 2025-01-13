@@ -32,12 +32,19 @@ async function deploySimpleLotteryContract(settings: LotterySettings) {
     prizeBrackets,
   } = settings;
 
+  const _prizeBrackets = prizeBrackets.map(v => BigInt(v));
+
   const lottery = await hre.viem.deployContract(
     "Lottery",
-    [pricePerTicket, ticketDigitLength, fees, nonce, maxRetries, prizeBrackets],
-    {
-      value: 0n,
-    }
+    [
+      pricePerTicket,
+      BigInt(ticketDigitLength),
+      fees,
+      BigInt(nonce),
+      BigInt(maxRetries),
+      _prizeBrackets,
+    ],
+    { value: 0n },
   );
 
   const publicClient = await hre.viem.getPublicClient();
@@ -84,7 +91,7 @@ describe("Lottery", function() {
         const settings = Object.assign(
           {},
           defaultSettings,
-          { pricePerTicket: BigInt(0.5) * defaultSettings.fees },
+          { pricePerTicket: defaultSettings.fees / 2n },
         );
 
         return deploySimpleLotteryContract(settings);
@@ -168,13 +175,13 @@ describe("Lottery", function() {
       const wallet = wallets[1];
       const contract = await hre.viem.getContractAt("Lottery", lottery.address);
 
-      const tickets = 5;
+      const tickets = 5n;
 
       return expect(contract.write.buyTicket(
-        [BigInt(tickets)],
+        [tickets],
         {
           account: wallet.account,
-          value: BigInt(tickets) * settings.pricePerTicket,
+          value: tickets * settings.pricePerTicket,
         },
 
       )).to.not.be.rejected;
@@ -300,26 +307,27 @@ describe("Lottery", function() {
 
   describe("set winning number", () => {
     it("should update the state variables", async () => {
-      const { lottery } = await loadFixture(deployDefault);
+      const { lottery, publicClient } = await loadFixture(deployDefault);
       const contract = await hre.viem.getContractAt("Lottery", lottery.address);
       const wallets = await hre.viem.getWalletClients();
       const chosen = wallets[0];
 
-      const want = 5;
+      const want = 5n;
 
       const startingWinningNumber = await contract.read.winningNumber();
       expect(startingWinningNumber).to.be.equal(
-        BigInt(0), 'initial winning number should be 0',
+        0n, 'initial winning number should be 0',
       );
 
-      await contract.write.setWinningNumber(
-        [BigInt(want)],
-        { account: chosen.account }
-      );
+      await publicClient.waitForTransactionReceipt({
+        hash: await contract.write.setWinningNumber(
+          [want], { account: chosen.account }
+        )
+      });
 
       const got = await contract.read.winningNumber();
       expect(got).to.be.equal(
-        BigInt(want), 'winning number state variable was not updated'
+        want, 'winning number state variable was not updated'
       );
 
       const isOver = await contract.read.isOver();
@@ -332,11 +340,10 @@ describe("Lottery", function() {
       const wallets = await hre.viem.getWalletClients();
       const chosen = wallets[2];
 
-      const want = 5;
+      const want = 5n;
 
       return expect(contract.write.setWinningNumber(
-        [BigInt(want)],
-        { account: chosen.account }
+        [want], { account: chosen.account }
       )).to.be.rejectedWith('can only be executed by the owner');
     });
 
@@ -348,13 +355,11 @@ describe("Lottery", function() {
 
       const want = 5n;
 
-      const txHash = await contract.write.setWinningNumber(
-        [want],
-        { account: chosen.account }
-      );
-
-      await publicClient.waitForTransactionReceipt({ hash: txHash });
-
+      await publicClient.waitForTransactionReceipt({
+        hash: await contract.write.setWinningNumber(
+          [want], { account: chosen.account }
+        )
+      });
 
       const events = await contract.getEvents.LotteryOver();
       expect(events).to.have.lengthOf(1);
@@ -364,17 +369,18 @@ describe("Lottery", function() {
     });
 
     it("should fail if called when already over", async () => {
-      const { lottery } = await loadFixture(deployDefault);
+      const { lottery, publicClient } = await loadFixture(deployDefault);
       const contract = await hre.viem.getContractAt("Lottery", lottery.address);
       const wallets = await hre.viem.getWalletClients();
       const chosen = wallets[0];
 
       const want = 5n;
 
-      await contract.write.setWinningNumber(
-        [want],
-        { account: chosen.account }
-      );
+      await publicClient.waitForTransactionReceipt({
+        hash: await contract.write.setWinningNumber(
+          [want], { account: chosen.account }
+        )
+      });
 
       return expect(contract.write.setWinningNumber(
         [want],
@@ -383,7 +389,8 @@ describe("Lottery", function() {
     });
   });
 
-  describe("distribute", () => {
+  describe("distribute prizes", () => {
+
     async function deployWithTwoDigitLength() {
       const settings = Object.assign(
         {},
@@ -401,18 +408,9 @@ describe("Lottery", function() {
       const owner = wallets[0];
       const participants = wallets.slice(1, 8);
 
-      const ticketsPerParticipant = 2n;
-      const amount = settings.pricePerTicket * ticketsPerParticipant;
-
       const contract = await hre.viem.getContractAt("Lottery", lottery.address);
 
-      for (let k = 0; k < participants.length; k++) {
-        const p = participants[k];
-        await contract.write.buyTicket(
-          [ticketsPerParticipant],
-          { account: p.account, value: amount }
-        );
-      }
+      await play(publicClient, participants, settings.pricePerTicket, contract);
 
       const winningIndex = 5;
       let tickets = [];
@@ -433,14 +431,16 @@ describe("Lottery", function() {
         hash: await contract.write.setWinningNumber([winningNumber], { account: owner.account })
       });
 
-
       const startingWinnerBalance = await publicClient.getBalance({ address: winner.account.address });
 
-      const withdrawHash = await contract.write.withdraw({ account: winner.account });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: withdrawHash });
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: await contract.write.withdraw({ account: winner.account })
+      });
       const gas = receipt.gasUsed * receipt.effectiveGasPrice;
 
-      const finalWinnerBalance = await publicClient.getBalance({ address: winner.account.address });
+      const finalWinnerBalance = await publicClient.getBalance({
+        address: winner.account.address
+      });
 
       const amountWon = finalWinnerBalance - startingWinnerBalance;
       const expected = ((pool * BigInt(settings.prizeBrackets[0])) / 100n) - gas;
@@ -448,5 +448,94 @@ describe("Lottery", function() {
       expect(amountWon).to.be.equal(expected);
     });
   });
+
+
+  describe("empty lottery balance", () => {
+    it("should not empty the lottery balance to non-owners", async () => {
+      const { lottery, publicClient, settings } = await loadFixture(deployDefault);
+      const wallets = await hre.viem.getWalletClients();
+
+      const participants = wallets.slice(1, 8);
+
+      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
+      await play(publicClient, participants, settings.pricePerTicket, contract);
+
+      return expect(contract.write.emptyBalance({ account: wallets[1].account })).to.be.eventually.rejectedWith("can only be executed by the owner");
+    });
+
+    it("should empty the lottery balance to the owner", async () => {
+      const { lottery, publicClient, settings } = await loadFixture(deployDefault);
+
+      async function getBalance(addr: `0x${string}`) {
+        return await publicClient.getBalance({ address: addr })
+      }
+
+      const wallets = await hre.viem.getWalletClients();
+
+      const owner = wallets[0];
+      const participants = wallets.slice(1, 8);
+
+
+      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
+      await play(publicClient, participants, settings.pricePerTicket, contract);
+
+      const startingLotteryBalance = await getBalance(lottery.address);
+      const startingOwnerBalance = await getBalance(owner.account.address);
+
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: await contract.write.emptyBalance({ account: owner.account })
+      });
+
+      const gasFees = receipt.gasUsed * receipt.effectiveGasPrice;
+
+      const finalLotteryBalance = await getBalance(lottery.address);
+      const finalOwnerBalance = await getBalance(owner.account.address);
+      const amountReceived = finalOwnerBalance - startingOwnerBalance;
+
+      expect(finalLotteryBalance).to.be.equal(0n, 'the final lottery balance should be 0');
+      expect(amountReceived + gasFees).to.be.equal(startingLotteryBalance, 'owner should have received the lottery balance');
+
+      const finalPool = await lottery.read.pool();
+      expect(finalPool).to.be.equal(0n, 'pool should have been set to 0');
+
+      let err = null;
+      try {
+        await publicClient.waitForTransactionReceipt({
+          hash: await lottery.write.emptyBalance({ account: owner.account })
+        });
+      } catch (error) {
+        err = error
+      }
+      expect(err).to.not.be.equal(null, "should have errored when calling emptyBalance if balance is already empty");
+
+      err = null;
+      try {
+        await publicClient.waitForTransactionReceipt({
+          hash: await lottery.write.withdraw({ account: owner.account })
+        });
+      } catch (error) {
+        err = error;
+      }
+      expect(err).to.not.be.equal(null, "should have errored when calling withdraw if balance is already empty");
+
+    });
+  })
 });
+
+
+// helper function for playing the lottery with a set of participants.
+async function play(publicClient: any, participants: any, pricePerTicket: any, contract: any) {
+  const ticketsPerParticipant = 2n;
+  const amount = pricePerTicket * ticketsPerParticipant;
+
+  for (let k = 0; k < participants.length; k++) {
+    const p = participants[k];
+    await publicClient.waitForTransactionReceipt({
+      hash: await contract.write.buyTicket(
+        [ticketsPerParticipant],
+        { account: p.account, value: amount }
+      )
+    });
+  }
+}
 
