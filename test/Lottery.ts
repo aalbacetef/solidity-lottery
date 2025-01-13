@@ -394,13 +394,12 @@ describe("Lottery", function() {
       return deploySimpleLotteryContract(settings);
     }
 
-    it("should assign tickets correctly", async () => {
+    it("should distribute the jackpot correctly", async () => {
       const { lottery, publicClient, settings } = await loadFixture(deployWithTwoDigitLength);
       const wallets = await hre.viem.getWalletClients();
 
       const owner = wallets[0];
       const participants = wallets.slice(1, 8);
-      console.log('participants: ', participants.length);
 
       const ticketsPerParticipant = 2n;
       const amount = settings.pricePerTicket * ticketsPerParticipant;
