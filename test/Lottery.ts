@@ -83,7 +83,7 @@ describe("Lottery", function() {
         return deploySimpleLotteryContract(settings);
       }
 
-      return expect(loadFixture(deployWithInvalidFees)).to.eventually.be.rejected;
+      return expect(loadFixture(deployWithInvalidFees)).to.be.eventually.rejected;
     });
 
     it("should fail if pricePerTicket is lower than fees ", async () => {
@@ -97,7 +97,7 @@ describe("Lottery", function() {
         return deploySimpleLotteryContract(settings);
       }
 
-      return expect(loadFixture(deployWithPriceLowerThanFees)).to.eventually.be.rejected;
+      return expect(loadFixture(deployWithPriceLowerThanFees)).to.be.eventually.rejected;
     });
 
     it("should fail if ticketDigitLength is invalid", async () => {
@@ -110,7 +110,7 @@ describe("Lottery", function() {
         return deploySimpleLotteryContract(settings);
       }
 
-      return expect(loadFixture(deployWithInvalidTicketDigitLength)).to.eventually.be.rejected;
+      return expect(loadFixture(deployWithInvalidTicketDigitLength)).to.be.eventually.rejected;
     });
 
     it("should fail if maxRetries is invalid", async () => {
@@ -123,7 +123,7 @@ describe("Lottery", function() {
         return deploySimpleLotteryContract(settings);
       }
 
-      return expect(loadFixture(deployWithInvalidMaxRetries)).to.eventually.be.rejected;
+      return expect(loadFixture(deployWithInvalidMaxRetries)).to.be.eventually.rejected;
     });
   });
 
@@ -136,72 +136,69 @@ describe("Lottery", function() {
       const { lottery } = await loadFixture(deployDefault);
       const wallets = await hre.viem.getWalletClients();
       const wallet = wallets[1];
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
 
-      await expect(contract.write.buyTicket(
+      await expect(lottery.write.buyTicket(
         [0n], { account: wallet.account, value: 0n }
-      )).to.be.rejectedWith("must have purchased at least one ticket");
+      )).to.be.eventually.rejectedWith("must have purchased at least one ticket");
     });
 
     it("should fail if purchasing with an invalid amount", async () => {
       const { lottery } = await loadFixture(deployDefault);
       const wallets = await hre.viem.getWalletClients();
       const wallet = wallets[1];
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
 
       const insufficientPayment = defaultSettings.pricePerTicket - 1n;
 
-      return expect(contract.write.buyTicket(
-        [1n], { account: wallet.account, value: insufficientPayment }
-      )).to.be.rejectedWith("must send exact amount required to purchase tickets");
+      await expect(lottery.write.buyTicket(
+        [1n],
+        { account: wallet.account, value: insufficientPayment },
+      )).to.be.eventually.rejectedWith("must send exact amount required to purchase tickets");
     });
 
     it("should purchase a ticket", async () => {
       const { lottery, settings } = await loadFixture(deployDefault);
       const wallets = await hre.viem.getWalletClients();
       const wallet = wallets[1];
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
 
-      return expect(contract.write.buyTicket(
+      await expect(lottery.write.buyTicket(
         [1n],
         { account: wallet.account, value: settings.pricePerTicket },
-
-      )).to.not.be.rejected;
+      )).to.not.be.eventually.rejected;
     });
 
     it("should purchase n tickets", async () => {
       const { lottery, settings } = await loadFixture(deployDefault);
       const wallets = await hre.viem.getWalletClients();
       const wallet = wallets[1];
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
 
       const tickets = 5n;
 
-      return expect(contract.write.buyTicket(
+      await expect(lottery.write.buyTicket(
         [tickets],
         {
           account: wallet.account,
           value: tickets * settings.pricePerTicket,
         },
 
-      )).to.not.be.rejected;
+      )).to.not.be.eventually.rejected;
     });
 
     it("should update the pool correctly", async () => {
-      const { lottery, settings } = await loadFixture(deployDefault);
+      const { lottery, settings, publicClient } = await loadFixture(deployDefault);
       const wallets = await hre.viem.getWalletClients();
       const wallet = wallets[1];
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
 
       const tickets = 5n;
       const amountPaid = tickets * settings.pricePerTicket;
 
-      await contract.write.buyTicket(
-        [tickets],
-        { account: wallet.account, value: amountPaid },
-      );
+      await publicClient.waitForTransactionReceipt({
+        hash: await lottery.write.buyTicket(
+          [tickets],
+          { account: wallet.account, value: amountPaid },
+        )
+      });
 
-      const pool = await contract.read.pool();
+      const pool = await lottery.read.pool();
       const amountFees = tickets * settings.fees;
       const gweiPaid = amountPaid;
       const want = gweiPaid - amountFees;
@@ -216,12 +213,11 @@ describe("Lottery", function() {
       const { lottery, settings, publicClient } = await loadFixture(deployDefault);
       const wallets = await hre.viem.getWalletClients();
       const wallet = wallets[1];
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
 
       const tickets = 5n;
       const amountPaid = tickets * settings.pricePerTicket;
 
-      const txHash = await contract.write.buyTicket(
+      const txHash = await lottery.write.buyTicket(
         [tickets],
         { account: wallet.account, value: amountPaid },
       );
@@ -232,7 +228,7 @@ describe("Lottery", function() {
       const gweiPaid = amountPaid;
       const want = gweiPaid - amountFees;
 
-      const events = await contract.getEvents.PoolIncreased();
+      const events = await lottery.getEvents.PoolIncreased();
       expect(events).to.have.lengthOf(1);
       expect(events[0].args.amount).to.be.equal(
         want, 'event should be emitted with correct amount'
@@ -243,7 +239,6 @@ describe("Lottery", function() {
       const { lottery, settings, publicClient } = await loadFixture(deployDefault);
       const wallets = await hre.viem.getWalletClients();
       const wallet = wallets[1];
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
 
       const startingLotteryBalance = await publicClient.getBalance({
         address: lottery.address
@@ -252,13 +247,12 @@ describe("Lottery", function() {
       const tickets = 5n;
       const amountPaid = tickets * settings.pricePerTicket;
 
-      const txHash = await contract.write.buyTicket(
-        [tickets],
-        { account: wallet.account, value: amountPaid },
-      );
-
-      await publicClient.waitForTransactionReceipt({ hash: txHash });
-
+      await publicClient.waitForTransactionReceipt({
+        hash: await lottery.write.buyTicket(
+          [tickets],
+          { account: wallet.account, value: amountPaid },
+        )
+      });
 
       const lotteryBalance = await publicClient.getBalance({
         address: lottery.address
@@ -275,23 +269,21 @@ describe("Lottery", function() {
       const wallets = await hre.viem.getWalletClients();
       const ownerWallet = wallets[0];
       const wallet = wallets[1];
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
 
       const owner = await lottery.read.owner();
       const startingOwnerBalance = await publicClient.getBalance({ address: owner });
 
-
       const tickets = 5n;
       const amountPaid = tickets * settings.pricePerTicket;
 
-      await contract.write.buyTicket(
+      await lottery.write.buyTicket(
         [tickets],
         { account: wallet.account, value: amountPaid },
       );
 
       const amountFees = tickets * settings.fees;
 
-      const txHash = await contract.write.withdraw({ account: ownerWallet.account });
+      const txHash = await lottery.write.withdraw({ account: ownerWallet.account });
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
       const gas = receipt.gasUsed * receipt.effectiveGasPrice;
 
@@ -308,60 +300,57 @@ describe("Lottery", function() {
   describe("set winning number", () => {
     it("should update the state variables", async () => {
       const { lottery, publicClient } = await loadFixture(deployDefault);
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
       const wallets = await hre.viem.getWalletClients();
       const chosen = wallets[0];
 
       const want = 5n;
 
-      const startingWinningNumber = await contract.read.winningNumber();
+      const startingWinningNumber = await lottery.read.winningNumber();
       expect(startingWinningNumber).to.be.equal(
         0n, 'initial winning number should be 0',
       );
 
       await publicClient.waitForTransactionReceipt({
-        hash: await contract.write.setWinningNumber(
+        hash: await lottery.write.setWinningNumber(
           [want], { account: chosen.account }
         )
       });
 
-      const got = await contract.read.winningNumber();
+      const got = await lottery.read.winningNumber();
       expect(got).to.be.equal(
         want, 'winning number state variable was not updated'
       );
 
-      const isOver = await contract.read.isOver();
+      const isOver = await lottery.read.isOver();
       expect(isOver).to.be.equal(true, 'isOver should be set to true');
     });
 
     it("should fail if not executed by the owner", async () => {
       const { lottery } = await loadFixture(deployDefault);
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
       const wallets = await hre.viem.getWalletClients();
       const chosen = wallets[2];
 
       const want = 5n;
 
-      return expect(contract.write.setWinningNumber(
+      return expect(lottery.write.setWinningNumber(
         [want], { account: chosen.account }
-      )).to.be.rejectedWith('can only be executed by the owner');
+      )).to.be.eventually.rejectedWith('can only be executed by the owner');
     });
 
     it("should emit the event", async () => {
       const { lottery, publicClient } = await loadFixture(deployDefault);
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
       const wallets = await hre.viem.getWalletClients();
       const chosen = wallets[0];
 
       const want = 5n;
 
       await publicClient.waitForTransactionReceipt({
-        hash: await contract.write.setWinningNumber(
+        hash: await lottery.write.setWinningNumber(
           [want], { account: chosen.account }
         )
       });
 
-      const events = await contract.getEvents.LotteryOver();
+      const events = await lottery.getEvents.LotteryOver();
       expect(events).to.have.lengthOf(1);
       expect(events[0].args.drawnDigit).to.be.equal(
         want, 'event was not emitted'
@@ -370,22 +359,21 @@ describe("Lottery", function() {
 
     it("should fail if called when already over", async () => {
       const { lottery, publicClient } = await loadFixture(deployDefault);
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
       const wallets = await hre.viem.getWalletClients();
       const chosen = wallets[0];
 
       const want = 5n;
 
       await publicClient.waitForTransactionReceipt({
-        hash: await contract.write.setWinningNumber(
+        hash: await lottery.write.setWinningNumber(
           [want], { account: chosen.account }
         )
       });
 
-      return expect(contract.write.setWinningNumber(
+      await expect(lottery.write.setWinningNumber(
         [want],
         { account: chosen.account }
-      )).to.be.rejectedWith('lottery is already over');
+      )).to.be.eventually.rejectedWith('lottery is already over');
     });
   });
 
@@ -408,33 +396,33 @@ describe("Lottery", function() {
       const owner = wallets[0];
       const participants = wallets.slice(1, 8);
 
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
-
-      await play(publicClient, participants, settings.pricePerTicket, contract);
+      await play(publicClient, participants, settings.pricePerTicket, lottery);
 
       const winningIndex = 5;
       let tickets = [];
 
       for (let k = 0; k < participants.length; k++) {
         const p = participants[k];
-        const v = await contract.read.ticketsForAddress([p.account.address]);
+        const v = await lottery.read.ticketsForAddress([p.account.address]);
 
         tickets[k] = v.slice(0);
       }
 
-      const pool = await contract.read.pool();
+      const pool = await lottery.read.pool();
 
       const winningNumber = tickets[winningIndex][0];
       const winner = participants[winningIndex];
 
       await publicClient.waitForTransactionReceipt({
-        hash: await contract.write.setWinningNumber([winningNumber], { account: owner.account })
+        hash: await lottery.write.setWinningNumber([winningNumber], { account: owner.account })
       });
 
-      const startingWinnerBalance = await publicClient.getBalance({ address: winner.account.address });
+      const startingWinnerBalance = await publicClient.getBalance({
+        address: winner.account.address
+      });
 
       const receipt = await publicClient.waitForTransactionReceipt({
-        hash: await contract.write.withdraw({ account: winner.account })
+        hash: await lottery.write.withdraw({ account: winner.account })
       });
       const gas = receipt.gasUsed * receipt.effectiveGasPrice;
 
@@ -449,7 +437,6 @@ describe("Lottery", function() {
     });
   });
 
-
   describe("empty lottery balance", () => {
     it("should not empty the lottery balance to non-owners", async () => {
       const { lottery, publicClient, settings } = await loadFixture(deployDefault);
@@ -457,10 +444,11 @@ describe("Lottery", function() {
 
       const participants = wallets.slice(1, 8);
 
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
-      await play(publicClient, participants, settings.pricePerTicket, contract);
+      await play(publicClient, participants, settings.pricePerTicket, lottery);
 
-      return expect(contract.write.emptyBalance({ account: wallets[1].account })).to.be.eventually.rejectedWith("can only be executed by the owner");
+      await expect(lottery.write.emptyBalance({
+        account: wallets[1].account
+      })).to.be.eventually.rejectedWith('MustBeOwner');
     });
 
     it("should empty the lottery balance to the owner", async () => {
@@ -476,14 +464,13 @@ describe("Lottery", function() {
       const participants = wallets.slice(1, 8);
 
 
-      const contract = await hre.viem.getContractAt("Lottery", lottery.address);
-      await play(publicClient, participants, settings.pricePerTicket, contract);
+      await play(publicClient, participants, settings.pricePerTicket, lottery);
 
       const startingLotteryBalance = await getBalance(lottery.address);
       const startingOwnerBalance = await getBalance(owner.account.address);
 
       const receipt = await publicClient.waitForTransactionReceipt({
-        hash: await contract.write.emptyBalance({ account: owner.account })
+        hash: await lottery.write.emptyBalance({ account: owner.account })
       });
 
       const gasFees = receipt.gasUsed * receipt.effectiveGasPrice;
@@ -492,46 +479,95 @@ describe("Lottery", function() {
       const finalOwnerBalance = await getBalance(owner.account.address);
       const amountReceived = finalOwnerBalance - startingOwnerBalance;
 
-      expect(finalLotteryBalance).to.be.equal(0n, 'the final lottery balance should be 0');
-      expect(amountReceived + gasFees).to.be.equal(startingLotteryBalance, 'owner should have received the lottery balance');
+      expect(finalLotteryBalance).to.be.equal(
+        0n,
+        'the final lottery balance should be 0'
+      );
+
+      expect(amountReceived + gasFees).to.be.equal(
+        startingLotteryBalance,
+        'owner should have received the lottery balance'
+      );
 
       const finalPool = await lottery.read.pool();
       expect(finalPool).to.be.equal(0n, 'pool should have been set to 0');
 
-      let err = null;
-      try {
-        await publicClient.waitForTransactionReceipt({
-          hash: await lottery.write.emptyBalance({ account: owner.account })
-        });
-      } catch (error) {
-        err = error
-      }
-      expect(err).to.not.be.equal(null, "should have errored when calling emptyBalance if balance is already empty");
+      await expect(lottery.write.emptyBalance({
+        account: owner.account
+      })).to.be.eventually.rejectedWith("balance is empty");
 
-      err = null;
-      try {
-        await publicClient.waitForTransactionReceipt({
-          hash: await lottery.write.withdraw({ account: owner.account })
-        });
-      } catch (error) {
-        err = error;
-      }
-      expect(err).to.not.be.equal(null, "should have errored when calling withdraw if balance is already empty");
+      await expect(lottery.write.withdraw({
+        account: owner.account
+      })).to.be.eventually.rejectedWith('already withdrew prize');
+    });
+  });
 
+  describe("transfer ownership", () => {
+    it("fails if not requested by owner", async () => {
+      const { lottery } = await loadFixture(deployDefault);
+
+      const wallets = await hre.viem.getWalletClients();
+      const notOwner = wallets[1];
+      const target = wallets[2];
+
+      await expect(lottery.write.transferOwnership(
+        [target.account.address],
+        { account: notOwner.account }
+      )).to.be.eventually.rejectedWith(`MustBeOwner`);
+    });
+
+    it("succeeds if done by owner", async () => {
+      const { lottery, publicClient } = await loadFixture(deployDefault);
+      const wallets = await hre.viem.getWalletClients();
+
+      shouldEqualIgnoreCase(
+        await lottery.read.owner(),
+        wallets[0].account.address,
+      );
+
+      const targetAddress = wallets[1].account.address;
+
+      await shouldFulfill(
+        publicClient,
+        lottery.write.transferOwnership(
+          [targetAddress],
+          { account: wallets[0].account }
+        )
+      );
+
+      shouldEqualIgnoreCase(
+        await lottery.read.owner(),
+        targetAddress,
+      );
     });
   })
 });
 
 
+/* helpers */
+
+function shouldEqualIgnoreCase(a: string, b: string) {
+  expect(a.toLowerCase()).to.be.equal(b.toLowerCase());
+}
+
+async function shouldFulfill(publicClient: waitForable, promise: Promise<any>) {
+  const hash = await expect(promise).to.be.eventually.fulfilled;
+  await publicClient.waitForTransactionReceipt({ hash });
+}
+
+type waitForable = {
+  waitForTransactionReceipt(arg: { hash: string }): Promise<any>;
+}
+
 // helper function for playing the lottery with a set of participants.
-async function play(publicClient: any, participants: any, pricePerTicket: any, contract: any) {
+async function play(publicClient: waitForable, participants: any, pricePerTicket: bigint, lottery: { write: any; }) {
   const ticketsPerParticipant = 2n;
   const amount = pricePerTicket * ticketsPerParticipant;
 
   for (let k = 0; k < participants.length; k++) {
     const p = participants[k];
     await publicClient.waitForTransactionReceipt({
-      hash: await contract.write.buyTicket(
+      hash: await lottery.write.buyTicket(
         [ticketsPerParticipant],
         { account: p.account, value: amount }
       )
