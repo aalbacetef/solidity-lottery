@@ -14,11 +14,15 @@ contract TicketManager {
     // Array to store all ticket numbers
     uint[] private tickets;
 
+    // Event emitted when a ticket is added
+    event TicketAdded(uint ticket, address participant);
+
     // Custom error for duplicate tickets
     error TicketAlreadyExists(uint ticket);
 
     /**
      * @dev Adds a ticket for a participant. Reverts if the ticket is already assigned.
+     * Emits a TicketAdded event on success.
      * @param ticket The ticket number to assign.
      * @param participant The address of the participant to assign the ticket to.
      */
@@ -31,6 +35,8 @@ contract TicketManager {
         ticketToParticipant[ticket] = participant;
         participantToTickets[participant].push(ticket);
         tickets.push(ticket);
+
+        emit TicketAdded(ticket, participant);
     }
 
     /**
