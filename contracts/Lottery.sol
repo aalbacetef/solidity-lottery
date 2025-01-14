@@ -102,12 +102,11 @@ contract Lottery {
 
     /**
      * @dev Initializes the contract with required parameters.
-     * Deploys a new instance of the TicketManager contract.
      * @param _pricePerTicket The price per ticket.
      * @param _ticketDigitLength The number of digits in the ticket numbers.
      * @param _fees The fee deducted for each ticket.
      * @param _nonce The initial nonce for random number generation.
-     * @param _maxRetries The maximum retries for generating a unique ticket.
+     * @param _maxRetries The maximum retries for generating tickets during a buyTicket request.
      * @param _prizeBrackets The percentages allocated to each prize bracket.
      */
     constructor(
@@ -119,10 +118,19 @@ contract Lottery {
         uint[] memory _prizeBrackets
     ) payable {
         require(_fees > 0, "fees must be larger than 0");
-        require(_pricePerTicket > _fees, "price per ticket must be larger than the amount paid for fees");
-        require(_ticketDigitLength > 0, "ticket digit length must be larger than 0");
+        require(
+            _pricePerTicket > _fees,
+            "price per ticket must be larger than the amount paid for fees"
+        );
+        require(
+            _ticketDigitLength > 0,
+            "ticket digit length must be larger than 0"
+        );
         require(_maxRetries > 0, "max retries must be larger than 0");
-        require(_prizeBrackets.length == _ticketDigitLength, "prize brackets length must equal ticket digit length");
+        require(
+            _prizeBrackets.length == _ticketDigitLength,
+            "prize brackets length must equal ticket digit length"
+        );
 
         owner = payable(msg.sender);
         nonce = _nonce;
@@ -159,7 +167,6 @@ contract Lottery {
         uint total = numTickets * pricePerTicket;
         uint totalFees = numTickets * fees;
 
-
         // to prevent DoS, we count all retries in a given contract/transaction.
         uint retries = 0;
 
@@ -189,7 +196,10 @@ contract Lottery {
     }
 
     /**
-     * @dev Allows the owner to withdraw accumulated funds.
+     * @dev Allows the owner to withdraw the owner's accumulated
+     * balance or for participants to withdraw their balance when the lottery
+     * is over.
+     * Reverts if there is nothing to withdraw.
      */
     function withdraw() external payable {
         if (msg.sender == owner) {
@@ -205,6 +215,11 @@ contract Lottery {
             return;
         }
 
+        // participants must wait for the lottery to be over
+        if (!isOver) {
+            revert NotAllowed(msg.sender);
+        }
+
         uint winnerBalance = winnerBalances[msg.sender];
         if (winnerBalance == 0) {
             revert NothingToWithdraw();
@@ -217,6 +232,7 @@ contract Lottery {
     /**
      * @dev Empties the lottery contract's balance and sends it to the owner.
      * Sets the pool and owner balance to 0, and sets the lottery as over.
+     * Reverts if there is nothing to withdraw.
      */
     function emptyBalance() external payable onlyOwner {
         uint currentBalance = address(this).balance;
@@ -230,7 +246,6 @@ contract Lottery {
         isOver = true;
         owner.transfer(currentBalance);
     }
-    
 
     /**
      * @dev Ends the lottery by setting the winning number.
@@ -251,17 +266,18 @@ contract Lottery {
      * @param participant The address of the participant.
      * @return The array of tickets assigned to the participant.
      */
-    function ticketsForAddress(address participant) external view returns (uint[] memory) {
-      bool isOwner = msg.sender == owner;
-      bool isOwnAddress = msg.sender == participant;
+    function ticketsForAddress(
+        address participant
+    ) external view returns (uint[] memory) {
+        bool isOwner = msg.sender == owner;
+        bool isOwnAddress = msg.sender == participant;
 
-      if (!isOwner && !isOwnAddress) {
-        revert NotAllowed(participant);
-      }
+        if (!isOwner && !isOwnAddress) {
+            revert NotAllowed(participant);
+        }
 
-      return ticketManager.getTicketsForParticipant(participant);
+        return ticketManager.getTicketsForParticipant(participant);
     }
-
 
     /**
      * @dev Allows the owner to transfer ownership of the contract.
@@ -289,7 +305,7 @@ contract Lottery {
             if (bracket == 0) {
                 continue;
             }
-            
+
             winnersPerBracket[bracket - 1]++;
         }
 
@@ -298,8 +314,8 @@ contract Lottery {
             address participant = ticketManager.getParticipantForTicket(ticket);
             uint bracket = ticketBrackets[k];
 
-            if(bracket == 0) {
-              continue;
+            if (bracket == 0) {
+                continue;
             }
 
             uint winnerCount = winnersPerBracket[bracket - 1];
@@ -319,7 +335,10 @@ contract Lottery {
      * @param winnerCount The number of winners in the bracket.
      * @return The amount for each winner.
      */
-    function _calculatePrize(uint bracket, uint winnerCount) private view returns (uint) {
+    function _calculatePrize(
+        uint bracket,
+        uint winnerCount
+    ) private view returns (uint) {
         uint amountPerBracket = (prizeBrackets[bracket - 1] * pool) / 100;
         return amountPerBracket / winnerCount;
     }
@@ -359,6 +378,9 @@ contract Lottery {
      */
     function _randMod(uint _modulus) private returns (uint) {
         nonce++;
-        return uint(keccak256(abi.encodePacked(block.timestamp, msg.sender, nonce))) % (_modulus + 1);
+        return
+            uint(
+                keccak256(abi.encodePacked(block.timestamp, msg.sender, nonce))
+            ) % (_modulus + 1);
     }
 }

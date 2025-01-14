@@ -44,7 +44,9 @@ contract TicketManager {
      * @param participant The address of the participant.
      * @return An array of ticket numbers assigned to the participant.
      */
-    function getTicketsForParticipant(address participant) external view returns (uint[] memory) {
+    function getTicketsForParticipant(
+        address participant
+    ) external view returns (uint[] memory) {
         return participantToTickets[participant];
     }
 
@@ -53,7 +55,9 @@ contract TicketManager {
      * @param ticket The ticket number to look up.
      * @return The address of the participant assigned to the ticket.
      */
-    function getParticipantForTicket(uint ticket) external view returns (address) {
+    function getParticipantForTicket(
+        uint ticket
+    ) external view returns (address) {
         return ticketToParticipant[ticket];
     }
 
