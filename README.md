@@ -50,12 +50,12 @@ The constructor initializes the lottery with the following parameters:
 - **`setWinningNumber(uint number)`**: Sets the winning number and finalizes the lottery. Only the contract owner can call this function.
 
 - **`withdraw()`**: 
-  - **For the owner**: Withdraws the accumulated fees.
+  - **For the owner**: Withdraws the accumulated owner's balance.
   - **For winners**: Allows withdrawal of their prize amounts.
 
 - **`ticketsForAddress(address participant)`**: Returns all tickets owned by a given address. Non-owners can only view their own tickets.
 
-- **`transferOwnership(address newOwner)`**: Transfers contract ownership to a specified address.
+- **`transferOwnership(address newOwner)`**: Transfers contract ownership to a specified address. Can only be executed by the owner.
 
 ---
 
@@ -63,7 +63,7 @@ The constructor initializes the lottery with the following parameters:
 
 - `PoolIncreased(uint amount)`: Emitted when the lottery pool grows due to ticket sales.
 - `LotteryOver(uint drawnDigit)`: Emitted when the winning number is set and the lottery concludes.
-
+- `OwnershipChanged(address from, address to)`: Emitted when the owner of the lottery is changed.
 ---
 
 ## Educational Value
