@@ -22,7 +22,6 @@ const settings: LotterySettings = {
 }
 
 const LotteryModule = buildModule("LotteryModule", (m) => {
-
   const lottery = m.contract("Lottery", [
     settings.pricePerTicket,
     settings.ticketDigitLength,
@@ -30,9 +29,7 @@ const LotteryModule = buildModule("LotteryModule", (m) => {
     settings.nonce,
     settings.maxRetries,
     settings.prizeBrackets,
-  ], {
-    value: 0,
-  });
+  ]);
 
   return { lottery };
 });
