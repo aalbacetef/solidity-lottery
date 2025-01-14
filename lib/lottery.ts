@@ -1,4 +1,3 @@
-
 export type LotterySettings = {
   pricePerTicket: bigint;
   fees: bigint;
