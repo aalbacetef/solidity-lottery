@@ -1,10 +1,9 @@
-
 // This setup uses Hardhat Ignition to manage smart contract deployments.
 // Learn more about it at https://hardhat.org/ignition
 
-import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
-import { parseEther } from "viem";
-import { LotterySettings } from "../../lib";
+import { buildModule } from '@nomicfoundation/hardhat-ignition/modules';
+import { parseEther } from 'viem';
+import { LotterySettings } from '../../lib';
 
 const settings: LotterySettings = {
   pricePerTicket: parseEther('0.004'),
@@ -19,10 +18,10 @@ const settings: LotterySettings = {
     6, // 4th group
     4, // 5th group
   ],
-}
+};
 
-const LotteryModule = buildModule("LotteryModule", (m) => {
-  const lottery = m.contract("Lottery", [
+const LotteryModule = buildModule('LotteryModule', (m) => {
+  const lottery = m.contract('Lottery', [
     settings.pricePerTicket,
     settings.ticketDigitLength,
     settings.fees,
