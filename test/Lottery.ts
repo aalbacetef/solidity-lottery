@@ -5,7 +5,14 @@ import { expect } from "chai";
 import hre from "hardhat";
 import { parseEther } from "viem";
 
-import { LotterySettings } from "../lib";
+import { LotterySettings } from "@/lib";
+import {
+  shouldFulfill,
+  shouldEqualIgnoreCase,
+  shouldFailWithError,
+  type waitForable,
+} from './helpers';
+
 
 const defaultSettings: LotterySettings = {
   pricePerTicket: parseEther("0.1"),
@@ -623,25 +630,6 @@ describe("Lottery", function() {
   })
 });
 
-
-/* helpers */
-
-function shouldEqualIgnoreCase(a: string, b: string) {
-  expect(a.toLowerCase()).to.be.equal(b.toLowerCase());
-}
-
-async function shouldFailWithError(promise: Promise<any>, err: string) {
-  return await expect(promise).to.be.eventually.rejectedWith(err);
-}
-
-async function shouldFulfill(publicClient: waitForable, promise: Promise<any>) {
-  const hash = await expect(promise).to.be.eventually.fulfilled;
-  return await publicClient.waitForTransactionReceipt({ hash });
-}
-
-type waitForable = {
-  waitForTransactionReceipt(arg: { hash: string }): Promise<any>;
-}
 
 // helper function for playing the lottery with a set of participants.
 async function play(publicClient: waitForable, participants: any, pricePerTicket: bigint, lottery: { write: any; }) {
