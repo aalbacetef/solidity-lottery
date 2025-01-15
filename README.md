@@ -64,23 +64,6 @@ The constructor initializes the lottery with the following parameters:
 - `PoolIncreased(uint amount)`: Emitted when the lottery pool grows due to ticket sales.
 - `LotteryOver(uint drawnDigit)`: Emitted when the winning number is set and the lottery concludes.
 - `OwnershipChanged(address from, address to)`: Emitted when the owner of the lottery is changed.
----
-
-## Educational Value
-
-This project illustrates:
-
-1. **Basic Lottery Mechanics**:
-   - Ticket sales.
-   - Prize distribution based on winning tiers.
-
-2. **Smart Contract Development**:
-   - Handling ETH transactions securely.
-   - Implementing mappings and state variables for participant data.
-
-3. **Key Blockchain Concepts**:
-   - Transparency through public state variables.
-   - Owner-only access control.
 
 ---
 
@@ -90,3 +73,13 @@ This project illustrates:
 - **Access Control**: Owner-restricted functions ensure key operations are limited to the intended party.
 - **Withdrawal Safety**: Users can only withdraw their rightful balances, preventing malicious withdrawals.
 
+---
+
+## Other Improvements 
+
+Aside from moving to something like [Chainlink VRF](https://chain.link/vrf), other things that could be added are:
+
+- mechanism for canceling the Lottery
+- mechanism for starting a new round
+- ways to allow for refunds
+- validation on the passed in prize brackets
