@@ -1,6 +1,6 @@
 # Lottery Smart Contract Project
 
-This project implements a lottery system as a Solidity smart contract. The contract serves as a **toy project/demo** and is not intended for production use. Its design highlights key concepts in blockchain development, such as randomness, prize distribution, and ownership management.
+This project implements a lottery system as a Solidity smart contract. The contract is meant to be a **toy project/demo** and is not intended for production use. 
 
 ---
 
